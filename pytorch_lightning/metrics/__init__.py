@@ -40,8 +40,9 @@ from pytorch_lightning.metrics.regression import (  # noqa: F401
     SSIM,
 )
 from pytorch_lightning.metrics.retrieval import RetrievalMAP  # noqa: F401
+from pytorch_lightning.utilities import rank_zero_deprecation
 
-warn(
+rank_zero_deprecation(
     "`pytorch_lightning.metrics.*` module has been renamed to `torchmetrics.*` and split off to its own package"
-    " (https://github.com/PyTorchLightning/metrics) since v1.3 and will be removed in v1.5", DeprecationWarning
+    " (https://github.com/PyTorchLightning/metrics) since v1.3 and will be removed in v1.5"
 )
