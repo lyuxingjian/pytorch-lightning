@@ -158,7 +158,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         We can ignore the ``RuntimeError`` to reduce friction with TPUs.
         """
         try:
-            xm.save(state_dict, path)
+            torch.save(state_dict, path)
         except RuntimeError as e:
             if "Failed to meet rendezvous" not in str(e):
                 raise e
