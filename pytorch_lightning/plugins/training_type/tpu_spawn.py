@@ -14,7 +14,6 @@
 import io
 import os
 import re
-import sys
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 import torch
@@ -129,7 +128,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
     def barrier(self, name: Optional[str] = None) -> None:
         if torch_distrib.is_initialized():
             rendezvous(f"pl.Trainer.{name}")
-                
+
     def transfer_distrib_spawn_state_on_fit_end(self, results):
         checkpoint_callback = self.lightning_module.trainer.checkpoint_callback
         best_model_path = checkpoint_callback.best_model_path if checkpoint_callback else None
@@ -144,12 +143,12 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
                 and len(best_model_path) > 0
             ):
                 last_path = re.sub(".ckpt", ".tmp_end.ckpt", best_model_path)
-                self.save(self.lightning_module.state_dict(), last_path)
+                last_checkpoint = self.on_save(self.lightning_module.state_dict())
 
             # todo, pass complete checkpoint as state dictionary
             self.mp_queue.put(best_model_path)
-            self.mp_queue.put(last_path)
             self.mp_queue.put(results)
+            self.mp_queue.put(last_checkpoint)
 
     def save(self, state_dict: Dict, path: str) -> None:
         """
@@ -158,11 +157,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         We can ignore the ``RuntimeError`` to reduce friction with TPUs.
         """
         try:
-            rank_zero_warn("Began xm saving@ "+str(path))
-            print(state_dict.keys(), sys.getsizeof(state_dict))
-            print(state_dict)
-            # xm.save(state_dict, path)
-            rank_zero_warn("Finished xm saving")
+            xm.save(state_dict, path)
         except RuntimeError as e:
             if "Failed to meet rendezvous" not in str(e):
                 raise e
@@ -188,11 +183,10 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         if self.is_global_zero:
             # load weights saved in ddp
             path = os.path.join(original_model.trainer.default_root_dir, "__temp_weight_distributed_end.ckpt")
-            rank_zero_warn("Removed HDD cached original weights@"+str(path))
-            # loaded_model = original_model.__class__.load_from_checkpoint(path)
+            loaded_model = original_model.__class__.load_from_checkpoint(path)
 
             # copy loaded weights to old model
-            # original_model.load_state_dict(loaded_model.state_dict())
+            original_model.load_state_dict(loaded_model.state_dict())
 
             # remove ddp weights
             os.remove(path)
@@ -238,7 +232,6 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
         # restore main state with best weights
         best_path = self.mp_queue.get()
-        last_path = self.mp_queue.get()
         self._results = self.mp_queue.get()
 
         # transfer back the best path to the trainer
@@ -248,10 +241,8 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
         # load last weights
         if last_path and model.trainer.state == TrainerState.FITTING:
-            rank_zero_warn('Tring to load last weights')
-            ckpt = torch.load(last_path, map_location=lambda storage, loc: storage)
-            rank_zero_warn('Loaded last weights')
-            model.load_state_dict(ckpt)
+            last_checkpoint = self.mp_queue.get()
+            model.load_state_dict(last_ckpt)
 
         self._model = model
 
@@ -307,6 +298,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
     def save_checkpoint(self, filepath, weights_only: bool = False):
         """Save model/training states as a checkpoint file through state-dump and file-write.
+
         Args:
             filepath: write-target file's path
             weights_only: saving model weights only
