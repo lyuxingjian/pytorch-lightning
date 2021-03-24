@@ -158,7 +158,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         """
         try:
             rank_zero_warn("Began xm saving@ "+str(path))
-            xm.save(state_dict, path)
+            # xm.save(state_dict, path)
             rank_zero_warn("Finished xm saving")
         except RuntimeError as e:
             if "Failed to meet rendezvous" not in str(e):
@@ -244,7 +244,9 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
         # load last weights
         if last_path and model.trainer.state == TrainerState.FITTING:
+            rank_zero_warn('Tring to load last weights')
             ckpt = torch.load(last_path, map_location=lambda storage, loc: storage)
+            rank_zero_warn('Loaded last weights')
             model.load_state_dict(ckpt)
 
         self._model = model
