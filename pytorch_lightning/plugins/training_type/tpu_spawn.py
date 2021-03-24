@@ -199,7 +199,6 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         """
         if model.trainer.is_global_zero:
             path = os.path.join(model.trainer.default_root_dir, "__temp_weight_distributed_end.ckpt")
-            rank_zero_warn("Saving spawn weights @"+path)
             model.trainer.save_checkpoint(path)
             rank_zero_warn("weights saved!")
             return path
@@ -306,9 +305,9 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
             filepath: write-target file's path
             weights_only: saving model weights only
         """
-        rank_zero_warn("begun saving checkpoint")
         # dump states as a checkpoint dictionary object
         _checkpoint = self.lightning_module.trainer.checkpoint_connector.dump_checkpoint(weights_only)
-        rank_zero_warn("dumped checkpoint")
+        rank_zero_warn("dumped checkpoint, now saving")
         # Todo: TypeError: 'mappingproxy' object does not support item assignment
         self.save({k: v for k, v in _checkpoint.items() if k != "callbacks"}, filepath)
+        ank_zero_warn("Saved everything in save_checkpoint!")
