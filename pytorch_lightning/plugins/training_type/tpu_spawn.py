@@ -14,7 +14,6 @@
 import io
 import os
 import re
-import gc
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 import torch
@@ -32,6 +31,7 @@ from pytorch_lightning.utilities.seed import seed_everything
 
 if _TPU_AVAILABLE:
     import torch_xla.core.xla_model as xm
+    import torch_xla.utils.serialization as xser
     import torch_xla.distributed.parallel_loader as xla_pl
     import torch_xla.distributed.xla_multiprocessing as xmp
     from torch_xla.core.xla_model import rendezvous
@@ -114,7 +114,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
         results = trainer.run_stage()
 
-        # self.__save_end_of_training_weights(self.lightning_module)
+        self.__save_end_of_training_weights(self.lightning_module)
         self.transfer_distrib_spawn_state_on_fit_end(results)
 
     def __save_end_of_training_weights(self, model: LightningModule) -> None:
@@ -129,7 +129,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
     def barrier(self, name: Optional[str] = None) -> None:
         if torch_distrib.is_initialized():
             rendezvous(f"pl.Trainer.{name}")
-
+                
     def transfer_distrib_spawn_state_on_fit_end(self, results):
         checkpoint_callback = self.lightning_module.trainer.checkpoint_callback
         best_model_path = checkpoint_callback.best_model_path if checkpoint_callback else None
@@ -144,16 +144,12 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
                 and len(best_model_path) > 0
             ):
                 last_path = re.sub(".ckpt", ".tmp_end.ckpt", best_model_path)
+                self.save(self.lightning_module.state_dict()), last_path)
 
             # todo, pass complete checkpoint as state dictionary
             self.mp_queue.put(best_model_path)
+            self.mp_queue.put(last_path)
             self.mp_queue.put(results)
-            last_checkpoint = self.lightning_module.trainer.checkpoint_connector.dump_checkpoint(True)
-            # Delete the un-picklable key
-            del last_checkpoint['callbacks']
-            gc.collect()
-            last_checkpoint = xm._maybe_convert_to_cpu(last_checkpoint)
-            self.mp_queue.put(last_checkpoint)
 
     def save(self, state_dict: Dict, path: str) -> None:
         """
@@ -162,7 +158,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         We can ignore the ``RuntimeError`` to reduce friction with TPUs.
         """
         try:
-            xm.save(state_dict, path)
+            xser.save(state_dict, path)
         except RuntimeError as e:
             if "Failed to meet rendezvous" not in str(e):
                 raise e
@@ -237,6 +233,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
         # restore main state with best weights
         best_path = self.mp_queue.get()
+        last_path = self.mp_queue.get()
         self._results = self.mp_queue.get()
 
         # transfer back the best path to the trainer
@@ -246,8 +243,8 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
         # load last weights
         if last_path and model.trainer.state == TrainerState.FITTING:
-            last_checkpoint = self.mp_queue.get()
-            model.load_state_dict(last_ckpt)
+            ckpt = xser.load(last_path, map_location=lambda storage, loc: storage)
+            model.load_state_dict(ckpt)
 
         self._model = model
 
