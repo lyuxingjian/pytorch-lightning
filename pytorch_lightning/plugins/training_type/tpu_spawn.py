@@ -113,7 +113,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
         results = trainer.run_stage()
 
-        self.__save_end_of_training_weights(self.lightning_module)
+        # self.__save_end_of_training_weights(self.lightning_module)
         self.transfer_distrib_spawn_state_on_fit_end(results)
 
     def __save_end_of_training_weights(self, model: LightningModule) -> None:
