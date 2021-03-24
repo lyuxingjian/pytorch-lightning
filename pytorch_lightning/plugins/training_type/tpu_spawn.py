@@ -201,6 +201,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
             path = os.path.join(model.trainer.default_root_dir, "__temp_weight_distributed_end.ckpt")
             rank_zero_warn("Saving spawn weights at "+path)
             model.trainer.save_checkpoint(path)
+            rank_zero_warn("weights saved!")
             return path
 
     def reduce_decision(self, decision: bool) -> bool:
