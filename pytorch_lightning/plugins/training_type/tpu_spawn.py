@@ -158,7 +158,9 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         We can ignore the ``RuntimeError`` to reduce friction with TPUs.
         """
         try:
+            rank_zero_warn("Saving checkpoint in [save] function")
             torch.save(state_dict, path)
+            rank_zero_warn("Saved checkpoint in [save] function")
         except RuntimeError as e:
             if "Failed to meet rendezvous" not in str(e):
                 raise e
