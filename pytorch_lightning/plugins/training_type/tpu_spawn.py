@@ -310,4 +310,4 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         rank_zero_warn("dumped checkpoint, now saving")
         # Todo: TypeError: 'mappingproxy' object does not support item assignment
         self.save({k: v for k, v in _checkpoint.items() if k != "callbacks"}, filepath)
-        ank_zero_warn("Saved everything in save_checkpoint!")
+        rank_zero_warn("Saved everything in save_checkpoint!")
