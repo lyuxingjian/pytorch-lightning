@@ -148,7 +148,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
             # todo, pass complete checkpoint as state dictionary
             self.mp_queue.put(best_model_path)
             self.mp_queue.put(results)
-            last_checkpoint = self.lightning_module.trainer.checkpoint_connector.dump_checkpoint(weights_only)
+            last_checkpoint = self.lightning_module.trainer.checkpoint_connector.dump_checkpoint(True)
             # Delete the un-picklable key
             del last_checkpoint['callbacks']
             gc.collect()
