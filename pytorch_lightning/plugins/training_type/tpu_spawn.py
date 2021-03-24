@@ -188,10 +188,11 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         if self.is_global_zero:
             # load weights saved in ddp
             path = os.path.join(original_model.trainer.default_root_dir, "__temp_weight_distributed_end.ckpt")
-            loaded_model = original_model.__class__.load_from_checkpoint(path)
+            rank_zero_warn("Removed HDD cached original weights@"+str(path))
+            # loaded_model = original_model.__class__.load_from_checkpoint(path)
 
             # copy loaded weights to old model
-            original_model.load_state_dict(loaded_model.state_dict())
+            # original_model.load_state_dict(loaded_model.state_dict())
 
             # remove ddp weights
             os.remove(path)
