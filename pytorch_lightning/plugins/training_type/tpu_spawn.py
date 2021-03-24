@@ -157,7 +157,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         We can ignore the ``RuntimeError`` to reduce friction with TPUs.
         """
         try:
-            rank_zero_warn("Began xm saving@", path)
+            rank_zero_warn("Began xm saving@ "+str(path))
             xm.save(state_dict, path)
             rank_zero_warn("Finished xm saving")
         except RuntimeError as e:
