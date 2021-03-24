@@ -121,7 +121,6 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         if on_colab_kaggle():
             rank_zero_warn("cleaning up... please do not interrupt")
             self.save_spawn_weights(model)
-            rank_zero_warn("Finished saving spawned weights")
 
     def model_to_device(self) -> None:
         self._model.to(xm.xla_device())
@@ -200,6 +199,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         """
         if model.trainer.is_global_zero:
             path = os.path.join(model.trainer.default_root_dir, "__temp_weight_distributed_end.ckpt")
+            rank_zero_warn("Saving spawn weights at "+path)
             model.trainer.save_checkpoint(path)
             return path
 
