@@ -158,7 +158,9 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         We can ignore the ``RuntimeError`` to reduce friction with TPUs.
         """
         try:
+            print('Saving model@', path)
             xser.save(state_dict, path)
+            print('Model saved@', path)
         except RuntimeError as e:
             if "Failed to meet rendezvous" not in str(e):
                 raise e
@@ -243,7 +245,8 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
         # load last weights
         if last_path and model.trainer.state == TrainerState.FITTING:
-            ckpt = xser.load(last_path, map_location=lambda storage, loc: storage)
+            print('Loading last weights')
+            ckpt = xser.load(last_path)
             model.load_state_dict(ckpt)
 
         self._model = model
