@@ -143,12 +143,11 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
                 and len(best_model_path) > 0
             ):
                 last_path = re.sub(".ckpt", ".tmp_end.ckpt", best_model_path)
-                last_checkpoint = self.on_save(self.lightning_module.state_dict())
 
             # todo, pass complete checkpoint as state dictionary
             self.mp_queue.put(best_model_path)
             self.mp_queue.put(results)
-            self.mp_queue.put(last_checkpoint)
+            self.mp_queue.put(self.lightning_module.state_dict())
 
     def save(self, state_dict: Dict, path: str) -> None:
         """
