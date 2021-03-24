@@ -14,6 +14,7 @@
 import io
 import os
 import re
+import sys
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 import torch
@@ -158,6 +159,8 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         """
         try:
             rank_zero_warn("Began xm saving@ "+str(path))
+            print(state_dict.keys(), sys.getsizeof(state_dict))
+            print(state_dict)
             # xm.save(state_dict, path)
             rank_zero_warn("Finished xm saving")
         except RuntimeError as e:
