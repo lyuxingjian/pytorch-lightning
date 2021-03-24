@@ -14,6 +14,7 @@
 import io
 import os
 import re
+import gc
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 import torch
@@ -308,6 +309,9 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         # dump states as a checkpoint dictionary object
         rank_zero_warn("dumped checkpoint, now saving")
         # Todo: TypeError: 'mappingproxy' object does not support item assignment
-        self.save(self.lightning_module.trainer.checkpoint_connector.dump_checkpoint(weights_only), filepath)
+        _checkpoint = self.lightning_module.trainer.checkpoint_connector.dump_checkpoint(weights_only)
+        del _checkpoint['callbacks']
+        gc.collect()
+        self.save(_checkpoint, filepath)
         # self.save({k: v for k, v in _checkpoint.items() if k != "callbacks"}, filepath)
         rank_zero_warn("Saved everything in save_checkpoint!")
