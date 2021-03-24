@@ -306,8 +306,8 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
             weights_only: saving model weights only
         """
         # dump states as a checkpoint dictionary object
-        _checkpoint = self.lightning_module.trainer.checkpoint_connector.dump_checkpoint(weights_only)
         rank_zero_warn("dumped checkpoint, now saving")
         # Todo: TypeError: 'mappingproxy' object does not support item assignment
-        self.save({k: v for k, v in _checkpoint.items() if k != "callbacks"}, filepath)
+        self.save(self.lightning_module.trainer.checkpoint_connector.dump_checkpoint(weights_only), filepath)
+        # self.save({k: v for k, v in _checkpoint.items() if k != "callbacks"}, filepath)
         rank_zero_warn("Saved everything in save_checkpoint!")
