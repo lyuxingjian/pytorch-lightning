@@ -158,9 +158,9 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         We can ignore the ``RuntimeError`` to reduce friction with TPUs.
         """
         try:
-            rank_zero_warn('Saving model@', path)
+            rank_zero_warn('Saving model@'+path)
             xser.save(state_dict, path)
-            rank_zero_warn('Model saved@', path)
+            rank_zero_warn('Model saved@'+path)
         except RuntimeError as e:
             if "Failed to meet rendezvous" not in str(e):
                 raise e
