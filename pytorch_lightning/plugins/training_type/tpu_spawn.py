@@ -121,6 +121,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         if on_colab_kaggle():
             rank_zero_warn("cleaning up... please do not interrupt")
             self.save_spawn_weights(model)
+            rank_zero_warn("Finished saving spawned weights")
 
     def model_to_device(self) -> None:
         self._model.to(xm.xla_device())
