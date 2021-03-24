@@ -14,7 +14,6 @@
 import io
 import os
 import re
-import gc
 from typing import Any, Dict, Iterable, List, Optional, Union
 
 import torch
@@ -129,7 +128,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
     def barrier(self, name: Optional[str] = None) -> None:
         if torch_distrib.is_initialized():
             rendezvous(f"pl.Trainer.{name}")
-
+                
     def transfer_distrib_spawn_state_on_fit_end(self, results):
         checkpoint_callback = self.lightning_module.trainer.checkpoint_callback
         best_model_path = checkpoint_callback.best_model_path if checkpoint_callback else None
@@ -158,9 +157,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         We can ignore the ``RuntimeError`` to reduce friction with TPUs.
         """
         try:
-            rank_zero_warn("Saving checkpoint in [save] function")
-            torch.save(state_dict, path)
-            rank_zero_warn("Saved checkpoint in [save] function")
+            xm.save(state_dict, path)
         except RuntimeError as e:
             if "Failed to meet rendezvous" not in str(e):
                 raise e
@@ -203,7 +200,6 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         if model.trainer.is_global_zero:
             path = os.path.join(model.trainer.default_root_dir, "__temp_weight_distributed_end.ckpt")
             model.trainer.save_checkpoint(path)
-            rank_zero_warn("weights saved!")
             return path
 
     def reduce_decision(self, decision: bool) -> bool:
@@ -303,17 +299,11 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
     def save_checkpoint(self, filepath, weights_only: bool = False):
         """Save model/training states as a checkpoint file through state-dump and file-write.
-
         Args:
             filepath: write-target file's path
             weights_only: saving model weights only
         """
         # dump states as a checkpoint dictionary object
-        rank_zero_warn("dumped checkpoint, now saving")
-        # Todo: TypeError: 'mappingproxy' object does not support item assignment
         _checkpoint = self.lightning_module.trainer.checkpoint_connector.dump_checkpoint(weights_only)
-        del _checkpoint['callbacks']
-        gc.collect()
-        self.save(_checkpoint, filepath)
-        # self.save({k: v for k, v in _checkpoint.items() if k != "callbacks"}, filepath)
-        rank_zero_warn("Saved everything in save_checkpoint!")
+        # Todo: TypeError: 'mappingproxy' object does not support item assignment
+        self.save({k: v for k, v in _checkpoint.items() if k != "callbacks"}, filepath)
