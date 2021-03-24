@@ -152,7 +152,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
             # Delete the un-picklable key
             del last_checkpoint['callbacks']
             gc.collect()
-            last_checkpoint = _maybe_convert_to_cpu(last_checkpoint)
+            last_checkpoint = xm._maybe_convert_to_cpu(last_checkpoint)
             self.mp_queue.put(last_checkpoint)
 
     def save(self, state_dict: Dict, path: str) -> None:
