@@ -31,7 +31,6 @@ from pytorch_lightning.utilities.seed import seed_everything
 
 if _TPU_AVAILABLE:
     import torch_xla.core.xla_model as xm
-    import torch_xla.utils.serialization as xser
     import torch_xla.distributed.parallel_loader as xla_pl
     import torch_xla.distributed.xla_multiprocessing as xmp
     from torch_xla.core.xla_model import rendezvous
@@ -129,11 +128,13 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
     def barrier(self, name: Optional[str] = None) -> None:
         if torch_distrib.is_initialized():
             rendezvous(f"pl.Trainer.{name}")
-
+                
     def transfer_distrib_spawn_state_on_fit_end(self, results):
-        best_model_path = self.lightning_module.trainer.checkpoint_callback.best_model_path
+        rank_zero_warn("Calling transfer_distrib_spawn_state_on_fit_end")
+        checkpoint_callback = self.lightning_module.trainer.checkpoint_callback
+        best_model_path = checkpoint_callback.best_model_path if checkpoint_callback else None
 
-        if self.mp_queue is not None:
+        if self.global_rank == 0 and self.mp_queue is not None:
             rank_zero_warn("cleaning up ddp environment...")
 
             # save the last weights
@@ -145,11 +146,12 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
                 last_path = re.sub(".ckpt", ".tmp_end.ckpt", best_model_path)
                 self.save(self.lightning_module.state_dict(), last_path)
 
-            if self.global_rank == 0:
-                # todo, pass complete checkpoint as state dictionary
-                self.mp_queue.put(best_model_path)
-                self.mp_queue.put(last_path)
-                self.mp_queue.put(results)
+            # todo, pass complete checkpoint as state dictionary
+            self.mp_queue.put(best_model_path)
+            self.mp_queue.put(last_path)
+            self.mp_queue.put(results)
+        rank_zero_warn("Completed calling transfer_distrib_spawn_state_on_fit_end")
+           
 
     def save(self, state_dict: Dict, path: str) -> None:
         """
@@ -158,7 +160,9 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         We can ignore the ``RuntimeError`` to reduce friction with TPUs.
         """
         try:
-            xser.save(state_dict, path, master_only=True)
+            rank_zero_warn("Calling save function @ path "+str(path))
+            xm.save(state_dict, path)
+            rank_zero_warn("Finished saving @ path "+str(path))
         except RuntimeError as e:
             if "Failed to meet rendezvous" not in str(e):
                 raise e
@@ -184,6 +188,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         if self.is_global_zero:
             # load weights saved in ddp
             path = os.path.join(original_model.trainer.default_root_dir, "__temp_weight_distributed_end.ckpt")
+            rank_zero_warn("Loading spawn_weights @ "+str(path))
             loaded_model = original_model.__class__.load_from_checkpoint(path)
 
             # copy loaded weights to old model
@@ -191,6 +196,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
             # remove ddp weights
             os.remove(path)
+            rank_zero_warn("Loaded and removed spawn_weights @ "+str(path))
 
         return loaded_model
 
@@ -200,7 +206,9 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         """
         if model.trainer.is_global_zero:
             path = os.path.join(model.trainer.default_root_dir, "__temp_weight_distributed_end.ckpt")
+            rank_zero_warn("Calling save_pawn_weights @ "+str(path))
             model.trainer.save_checkpoint(path)
+            rank_zero_warn("Completed calling save_pawn_weights @ "+str(path))
             return path
 
     def reduce_decision(self, decision: bool) -> bool:
@@ -243,8 +251,10 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
         # load last weights
         if last_path and model.trainer.state == TrainerState.FITTING:
-            ckpt = xser.load(last_path)
+            rank_zero_warn("Loading post_dispatch checkpoint @ "+str(last_path))
+            ckpt = torch.load(last_path, map_location=lambda storage, loc: storage)
             model.load_state_dict(ckpt)
+            rank_zero_warn("FInished loading post_dispatch checkpoint @ "+str(last_path))
 
         self._model = model
 
@@ -256,7 +266,9 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
         # load weights if not interrupted
         if on_colab_kaggle() and model.trainer.state == TrainerState.FITTING:
+            rank_zero_warn("Calling load_spawn_weights from __load_weights_on_main_process")
             self.load_spawn_weights(model)
+            rank_zero_warn("Finished load_weights_on_main_process")
 
         self._model = model
 
@@ -304,7 +316,9 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
             filepath: write-target file's path
             weights_only: saving model weights only
         """
+        rank_zero_warn("Calling save_checkpoint -> self.save at "+str(filepath)+" "+str(weights_only))
         # dump states as a checkpoint dictionary object
         _checkpoint = self.lightning_module.trainer.checkpoint_connector.dump_checkpoint(weights_only)
         # Todo: TypeError: 'mappingproxy' object does not support item assignment
         self.save({k: v for k, v in _checkpoint.items() if k != "callbacks"}, filepath)
+        rank_zero_warn("Completed calling save_checkpoint -> self.save at "+str(filepath)+" "+str(weights_only))
