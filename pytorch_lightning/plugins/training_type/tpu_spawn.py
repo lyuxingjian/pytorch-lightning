@@ -114,14 +114,16 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
         results = trainer.run_stage()
 
-        self.__save_end_of_training_weights(self.lightning_module)
+        # self.__save_end_of_training_weights(self.lightning_module)
         self.transfer_distrib_spawn_state_on_fit_end(results)
 
     def __save_end_of_training_weights(self, model: LightningModule) -> None:
         # when training ends on these platforms dump weights to get out of the main process
-        # if on_colab_kaggle():
-        #     rank_zero_warn("cleaning up... please do not interrupt")
-        #     self.save_spawn_weights(model)
+        rank_zero_warn('Calling __save_end_of_training_weights')
+        if on_colab_kaggle():
+            rank_zero_warn("cleaning up... please do not interrupt")
+            self.save_spawn_weights(model)
+        rank_zero_warn('Successfully called __save_end_of_training_weights')
 
     def model_to_device(self) -> None:
         self._model.to(xm.xla_device())
@@ -131,6 +133,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
             rendezvous(f"pl.Trainer.{name}")
                 
     def transfer_distrib_spawn_state_on_fit_end(self, results):
+        rank_zero_warn('Calling transfer_distrib_spawn_state')
         checkpoint_callback = self.lightning_module.trainer.checkpoint_callback
         best_model_path = checkpoint_callback.best_model_path if checkpoint_callback else None
 
@@ -144,7 +147,9 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
                 and len(best_model_path) > 0
             ):
                 last_path = re.sub(".ckpt", ".tmp_end.ckpt", best_model_path)
+                rank_zero_warn('Calling "saving" inside transfer_distrib_spawn_state')
                 self.save(self.lightning_module.state_dict(), last_path)
+                rank_zero_warn('Finished calling "saving" inside transfer_distrib_spawn_state')
 
             # todo, pass complete checkpoint as state dictionary
             self.mp_queue.put(best_model_path)
@@ -244,8 +249,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         # todo, pass also bets score
 
         # load last weights
-        if last_path and model.trainer.state == TrainerState.FITTING:
-            print('Loading last weights')
+        if last_path and model.trainer.state == TrainerState.FITTING
             ckpt = xser.load(last_path)
             model.load_state_dict(ckpt)
 
