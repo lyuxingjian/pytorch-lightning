@@ -119,9 +119,9 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
 
     def __save_end_of_training_weights(self, model: LightningModule) -> None:
         # when training ends on these platforms dump weights to get out of the main process
-        if on_colab_kaggle():
-            rank_zero_warn("cleaning up... please do not interrupt")
-            self.save_spawn_weights(model)
+        # if on_colab_kaggle():
+        #     rank_zero_warn("cleaning up... please do not interrupt")
+        #     self.save_spawn_weights(model)
 
     def model_to_device(self) -> None:
         self._model.to(xm.xla_device())
@@ -258,8 +258,8 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         model = self.lightning_module
 
         # load weights if not interrupted
-        if on_colab_kaggle() and model.trainer.state == TrainerState.FITTING:
-            self.load_spawn_weights(model)
+        # if on_colab_kaggle() and model.trainer.state == TrainerState.FITTING:
+        #     self.load_spawn_weights(model)
 
         self._model = model
 
