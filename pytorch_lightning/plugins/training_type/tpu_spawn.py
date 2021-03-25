@@ -31,6 +31,7 @@ from pytorch_lightning.utilities.seed import seed_everything
 
 if _TPU_AVAILABLE:
     import torch_xla.core.xla_model as xm
+    import torch_xla.utils.serialization as xser
     import torch_xla.distributed.parallel_loader as xla_pl
     import torch_xla.distributed.xla_multiprocessing as xmp
     from torch_xla.core.xla_model import rendezvous
@@ -153,15 +154,20 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         rank_zero_warn("Completed calling transfer_distrib_spawn_state_on_fit_end")
            
 
-    def save(self, state_dict: Dict, path: str) -> None:
+    def save(self, state_dict: Dict, path: str, save_spawn: bool = False) -> None:
         """
         Saving with ``xm.save`` can be unstable and miss the rendez-vous after ``torch.save``.
         The rendez-vous doesn't affect directly saving.
         We can ignore the ``RuntimeError`` to reduce friction with TPUs.
         """
         try:
-            rank_zero_warn("Calling save function @ path "+str(path))
-            xm.save(state_dict, path)
+            rank_zero_warn("Calling save function @ path "+str(path)+" "+str(save_spawn))
+            if save_spawn:
+                rank_zero_warn("Using xser save @ path "+str(path))
+                xser.save(state_dict, path, master_only=True)
+            else:
+                rank_zero_warn("Using xm save @ path "+str(path))
+                xm.save(state_dict, path)
             rank_zero_warn("Finished saving @ path "+str(path))
         except RuntimeError as e:
             if "Failed to meet rendezvous" not in str(e):
@@ -207,7 +213,7 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
         if model.trainer.is_global_zero:
             path = os.path.join(model.trainer.default_root_dir, "__temp_weight_distributed_end.ckpt")
             rank_zero_warn("Calling save_pawn_weights @ "+str(path))
-            model.trainer.save_checkpoint(path)
+            model.trainer.save_checkpoint(path, save_spawn=True)
             rank_zero_warn("Completed calling save_pawn_weights @ "+str(path))
             return path
 
@@ -310,15 +316,15 @@ class TPUSpawnPlugin(DDPSpawnPlugin):
     def predict_step(self, *args, **kwargs):
         return self.lightning_module.predict_step(*args, **kwargs)
 
-    def save_checkpoint(self, filepath, weights_only: bool = False):
+    def save_checkpoint(self, filepath, weights_only: bool = False, save_spawn: bool = False):
         """Save model/training states as a checkpoint file through state-dump and file-write.
         Args:
             filepath: write-target file's path
             weights_only: saving model weights only
         """
-        rank_zero_warn("Calling save_checkpoint -> self.save at "+str(filepath)+" "+str(weights_only))
+        rank_zero_warn("Calling save_checkpoint -> self.save at "+str(filepath)+" "+str(weights_only)+" "+str(save_spawn))
         # dump states as a checkpoint dictionary object
         _checkpoint = self.lightning_module.trainer.checkpoint_connector.dump_checkpoint(weights_only)
         # Todo: TypeError: 'mappingproxy' object does not support item assignment
-        self.save({k: v for k, v in _checkpoint.items() if k != "callbacks"}, filepath)
+        self.save({k: v for k, v in _checkpoint.items() if k != "callbacks"}, filepath, save_spawn=save_spawn)
         rank_zero_warn("Completed calling save_checkpoint -> self.save at "+str(filepath)+" "+str(weights_only))
